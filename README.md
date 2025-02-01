@@ -94,9 +94,11 @@ cd $HOME/aerial_robotics_ws
 catkin build
 ```
 
-## Simulation
+## Simulation 
 ```
+
 [Launch ROS Gazebo SIM in new terminal]:
+cd $HOME/aerial_robotics_ws && source devel/setup.bash
 roslaunch robowork_minihawk_gazebo minihawk_playpen.launch
 
 [Launch Ardupilot Gazebo SITL in new terminal]:
