@@ -94,7 +94,7 @@ cd $HOME/aerial_robotics_ws
 catkin build
 ```
 
-## Simulation 
+## Basic simulation testing 
 ```
 
 [Launch ROS Gazebo SIM in new terminal]:
