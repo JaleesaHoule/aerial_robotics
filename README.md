@@ -150,3 +150,48 @@ rosservice call /minihawk_SIM/mavros/set_mode "custom_mode: 'QHOVER'"
 [Invoke ROS service in terminal 2]:
 rosservice call /minihawk_SIM/mavros/set_mode "custom_mode: 'QLAND'"
 ```
+
+
+
+## Project Implementation 
+
+### goal: land the drone on building using given error measurements between drone and Apriltag
+```
+
+[Launch ROS Gazebo SIM in new terminal]:
+cd $HOME/aerial_robotics_ws && source devel/setup.bash
+roslaunch robowork_minihawk_gazebo minihawk_playpen.launch
+
+[Launch Ardupilot Gazebo SITL in new terminal]:
+cd $HOME/aerial_robotics_ws/ardupilot
+./Tools/autotest/sim_vehicle.py -v ArduPlane -f gazebo-minihawk --model gazebo-quadplane-tilttri --console  # --map
+
+[Launch Rviz in new terminal]:
+rviz -d $HOME/aerial_robotics_ws/src/aerial_robotics/robowork_minihawk_launch/config/minihawk_SIM.rviz
+
+### MAVProxy-based commanding ###
+
+[Load sample mission waypoints in Gazebo SITL terminal]
+wp load ../src/aerial_robotics/robowork_minihawk_gazebo/resources/waypoints.txt
+
+### MAVROS-based commanding ###
+
+[Launch ROS node in new terminal 1]:
+ROS_NAMESPACE="minihawk_SIM" roslaunch robowork_minihawk_launch vehicle1_apm_SIM.launch
+
+rosservice call /minihawk_SIM/mavros/set_mode "custom_mode: 'AUTO'"
+rosservice call /minihawk_SIM/mavros/cmd/arming True   ###Required if the mission hasn't started yet### 
+
+### Once the vehicle reaches its final waypoint (over the building) the camera will be looking at an apriltag marker  ###
+
+[Observe ROS topic output of apriltag_ros node in new terminal 3 (relative pose in camera frame coordinates with respect to detected apriltag marker)]:
+rostopic echo /minihawk_SIM/MH_usb_camera_link_optical/tag_detections
+
+### Initiate custom Ros node for landing protocol ###
+
+
+### Switch to Land Mode when close to landing pad ###
+# https://ardupilot.org/plane/docs/qland-mode.html
+[Invoke ROS service in terminal 2]:
+rosservice call /minihawk_SIM/mavros/set_mode "custom_mode: 'QLAND'"
+```
