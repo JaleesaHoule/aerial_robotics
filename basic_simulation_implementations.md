@@ -1,4 +1,4 @@
-
+```
 [Observe ROS topic output of apriltag_ros node in new terminal 3 (relative pose in camera frame coordinates with respect to detected apriltag marker)]:
 rostopic echo /minihawk_SIM/MH_usb_camera_link_optical/tag_detections
 
@@ -22,12 +22,7 @@ rosservice call /minihawk_SIM/mavros/set_mode "custom_mode: 'QLAND'"
 ```
 
 
-
-## Project Implementation 
-
-### goal: land the drone on building using given error measurements between drone and Apriltag
-
-#### Manual implementation for drone flight:
+#### Manual controls:
 ```
 
 [Launch ROS Gazebo SIM in new terminal]:
