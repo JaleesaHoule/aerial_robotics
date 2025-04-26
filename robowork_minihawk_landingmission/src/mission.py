@@ -29,10 +29,10 @@ within this node:
 -> check for tag_detections -> while detections is none: wait
 -> onces detections are being published:
 	- get pose + orientation messages
-	- calculate gains for minimizing error
+	- calculate gains via PID controller to minimize error
 	- change to qloiter mode + start to send rc commands with calculated gains
-	- repeat until x,y error ~ 0 and detections are lost
--> once the drone is close to the landing pad with x,y error of zero, can then initiate landing protocol
+	- repeat until altitude is low enough that tag detections are lost
+-> once the drone is close to the landing pad with small (x,y) error, can then initiate landing protocol
 
 
 '''
@@ -63,13 +63,9 @@ class MinihawkController(object):
 
 		elif self.tag_detection == True:
 			self.flightmode = 'QLOITER'
-			#new_channel_values=  [1500, 1500, 1500, 1500, 1800, 1000, 1000, 1800, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-			#self.control_publisher.publish(channels= new_channel_values)
 		elif (self.tag_detection == False) and (self.position is not None) and (self.position.z < 10):
      			self.flightmode = 'QLAND'
 			print('Met landing criteria')
-
-		#print('last flight mode:', last_flight_mode, 'current flight mode:', self.flightmode)
 		
 		# only need to update controller flight mode if condition changes
 		if last_flight_mode != self.flightmode:
@@ -114,7 +110,7 @@ class MinihawkController(object):
 		
 
 	def control_drone_movement(self):
-			# calculate controls based on self.position & self.orientation: 4 first channels are 0:roll(-left,+right), 1:pitch(-up,+down), 2:throttle(-down,+up), 3:yaw(-left,+right))]
+			# calculate controls based on self.position & self.orientation: 4 first channels are 0:roll(-left,+right), 1:pitch(-up,+down), 2:throttle(-down,+up), 3:yaw(-left,+right))] standard neutral values: [1500, 1500, 1500, 1500, 1800, 1000, 1000, 1800, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 			
 			roll_gain, pitch_gain, throttle_gain, yaw_gain = self.get_all_controls()
 
@@ -162,14 +158,14 @@ class MinihawkController(object):
 
 			# get current error values 
 			rospy.Subscriber("/minihawk_SIM/MH_usb_camera_link_optical/tag_detections", AprilTagDetectionArray, self.get_apriltag_values)
-			print('tag detected?', self.tag_detection)
+			print('******************************************* \n\n April tag detected?', self.tag_detection)
 			self.position_history.append(self.position)
 			self.orientation_history.append(self.orientation)
 
 			if len(self.position_history) > 3:
 				self.prior_position = self.position_history[-2]
 				self.prior_orientation = self.orientation_history[-2]
-				print('current error:', self.position, 'prior error:', self.prior_position, 'same?', (self.prior_position==self.position))
+				print('Current Error:', self.position,) #'prior error:', self.prior_position, 'same?', (self.prior_position==self.position))
 				self.position_history.pop(0)
 				self.orientation_history.pop(0)
 			
