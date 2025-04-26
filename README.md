@@ -31,8 +31,8 @@ rviz -d $HOME/aerial_robotics_ws/src/aerial_robotics/robowork_minihawk_launch/co
 [Load sample mission waypoints in Gazebo SITL terminal]
 wp load ../src/aerial_robotics/robowork_minihawk_gazebo/resources/waypoints.txt
 
-
-
+```
+```
 [Launch ROS node in new terminal]:
 ROS_NAMESPACE="minihawk_SIM" roslaunch robowork_minihawk_launch vehicle1_apm_SIM.launch
 
@@ -42,7 +42,7 @@ rosservice call /minihawk_SIM/mavros/cmd/arming True   ###Required if the missio
 
 [Observe ROS topic output of apriltag_ros node in new terminal]:
 rostopic echo /minihawk_SIM/MH_usb_camera_link_optical/tag_detections
-
+```
 
 #### Automated implementation of the above steps: 
 
