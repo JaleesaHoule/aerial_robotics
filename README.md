@@ -44,7 +44,7 @@ rosservice call /minihawk_SIM/mavros/cmd/arming True   ###Required if the missio
 rostopic echo /minihawk_SIM/MH_usb_camera_link_optical/tag_detections
 ```
 
-#### Automated implementation of the above steps: 
+## Automated implementation of the above steps: 
 
 ```
 cd $HOME/aerial_robotics_ws/robowork_minihawk_landingmission && chmod +x execute_mission.sh
