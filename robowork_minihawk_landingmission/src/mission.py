@@ -12,6 +12,7 @@ from mavros_msgs.srv import SetMode
 
 # standard libraries
 import numpy as np
+import copy
 #from scipy.spatial.transform import Rotation as R
 ################################################################################
 
@@ -41,10 +42,13 @@ class MinihawkController(object):
 	def __init__(self):
 
 		self.flightmode = 'AUTO'
-		self.position = {}
-		self.orientation = {}
-		self.prior_position = {}
-		self.prior_orientation = {}
+		self.position = None
+		self.orientation = None
+		self.prior_position = None
+		self.prior_orientation = None
+		self.position_history  = []
+		self.orientation_history  = []
+		self.integral_error = {'roll': [0], 'pitch': [0],  'throttle': [0],  'yaw': [0]  }
 		self.tag_detection= False
 		self.control_publisher = rospy.Publisher("/minihawk_SIM/mavros/rc/override", OverrideRCIn, queue_size=10)
 		self.dt = .1	
@@ -54,19 +58,16 @@ class MinihawkController(object):
 		
     	def update_flight_mode(self):
 		last_flight_mode = self.flightmode
-		if (self.tag_detection == False) and (self.position == {}):
+		if self.tag_detection == False and (self.position is None):
 			self.flightmode= 'AUTO'
-		elif (self.tag_detection == True):
+
+		elif self.tag_detection == True:
 			self.flightmode = 'QLOITER'
 			#new_channel_values=  [1500, 1500, 1500, 1500, 1800, 1000, 1000, 1800, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 			#self.control_publisher.publish(channels= new_channel_values)
-		elif (self.tag_detection == False) and (np.abs(self.position.z) < 11):
-     			self.flightmode=='QLAND'
-
-		# check if drone has lost AprilTag, if so, change back to AUTO
-		#if (self.flightmode =='QLOITER') and (self.prior_position == self.position):
-	#		self.flightmode=='AUTO'		
-
+		elif (self.tag_detection == False) and (self.position is not None) and (self.position.z < 10):
+     			self.flightmode = 'QLAND'
+			print('Met landing criteria')
 
 		#print('last flight mode:', last_flight_mode, 'current flight mode:', self.flightmode)
 		
@@ -78,13 +79,11 @@ class MinihawkController(object):
 
 
 	def convert_quats_to_euler(self, quats):
-		#rot = R.from_quat([quats.w,quats.x, quats.y, quats.z])
-		#euler_angles = rot.as_euler('xyz', degrees =False)
+
 		w = quats.w
 		x = quats.x
 		y = quats.y
 		z = quats.z
-		#print('quats:', w,x,y,z)
 
 		t0 = 2 * (w * x + y * z)
 		t1 = 1 - 2* (x * x + y**2)
@@ -98,7 +97,6 @@ class MinihawkController(object):
 		t3 = 2 * (w * z + x * y)
 		t4 = 1 - 2 * (y**2 + z * z)
 		Z = np.arctan2(t3, t4)
-		#print('X,Y,Z', X,Y,Z)
 
 		return {"x":X, "y": Y,"z": Z}
 
@@ -113,47 +111,46 @@ class MinihawkController(object):
 		except:
 			self.tag_detection = False
 
+		
+
 	def control_drone_movement(self):
 			# calculate controls based on self.position & self.orientation: 4 first channels are 0:roll(-left,+right), 1:pitch(-up,+down), 2:throttle(-down,+up), 3:yaw(-left,+right))]
 			
 			roll_gain, pitch_gain, throttle_gain, yaw_gain = self.get_all_controls()
-			#print('GAINS:', roll_gain, pitch_gain, throttle_gain, yaw_gain)
-			#if (self.position.z>20):
-			if (np.abs(self.position.y) > 0.75) or (np.abs(self.position.x) > 0.75):
-				new_channel_values=  [1500 + roll_gain, 1500 - pitch_gain, 1500, 1500 - yaw_gain, 1800, 1000 , 1000, 1800, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-				print('not adjusting throttle')
-			else:		
-				new_channel_values=  [1500, 1500, 1500 - throttle_gain, 1500, 1800, 1000 , 1000, 1800, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]	
-				print('adjusting throttle')
-			#if (self.position.z<20):
-			#	if (np.abs(self.position.y) > 0.25) or (np.abs(self.position.x) > 0.25):
-			#		new_channel_values=  [1500 + roll_gain, 1500 - pitch_gain, 1500, 1500 - yaw_gain, 1800, 1000 , 1000, 1800, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-			#		print('not adjusting throttle')
-			##	else:		
-			#		new_channel_values=  [1500, 1500, 1500 - throttle_gain, 1500, 1800, 1000 , 1000, 1800, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]	
-			#		print('adjusting throttle')
+
+			new_channel_values=  [1500 + roll_gain, 1500 + pitch_gain, 1500 + throttle_gain, 1500 + yaw_gain, 1800, 1000 , 1000, 1800, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
 			self.control_publisher.publish(channels= new_channel_values)
 			print('updated QLOITER rc controls: ', new_channel_values)
 
-	def PID(self, current_error, prior_error, p, d, i):
-		kp_ = p * current_error
-		kd_ = d * (current_error - prior_error)/self.dt
-		ki_ = i *(current_error + prior_error)*0.5*self.dt  
-		gain =kp_ + kd_ + ki_ 
-		#if (current_error - prior_error) > 0:
-		#	gain = 1*gain
-		#elif (current_error - prior_error) < 0:
-		#	gain = -1*gain
-		print('current error:', current_error, 'prior error:', prior_error, 'difference:', current_error-prior_error)
+
+	def PID(self, current_error, prior_error,integral_error_, Kp, Kd, Ki, printcontrol, setpoint=0, ):
+
+		error =  setpoint - current_error
+		integral_error_.append(error*self.dt)
+
+		kp_ = Kp * error
+		kd_ = Kd * (current_error - prior_error)/self.dt
+		ki_ = Ki *np.sum(integral_error_[-15:])
+
+		gain = kp_ + kd_ + ki_ 
+		print(printcontrol, ': ', 'Kp:', kp_, 'Ki:', ki_, 'Kd:', kd_, 'total gain:', gain) 
+
+		
+		#use max gain of 100
+		if np.abs(gain) > 100:
+			gain = np.sign(gain)*100
+		
 		return gain
+
 
 	def get_all_controls(self):
 
 		try:
-			roll_gain = self.PID(self.position.x, self.prior_position.x,5,0,10)
-			pitch_gain= self.PID(self.position.y, self.prior_position.y,25,3,50)
-			throttle_gain = self.PID(self.position.z, self.prior_position.z,5,0,10)
-			yaw_gain = self.PID(self.orientation.get('z'), self.prior_orientation.get('z'),1,1,1)
+			roll_gain = self.PID(self.position.x, self.prior_position.x, self.integral_error['roll'],5, 10, 1, 'roll')
+			pitch_gain= self.PID(self.position.y, self.prior_position.y, self.integral_error['pitch'],5, 10, 1, 'pitch')
+			throttle_gain = self.PID(self.position.z, self.prior_position.z,self.integral_error['throttle'],5,10,1, 'throttle')
+			yaw_gain = self.PID(self.orientation.get('z'), self.prior_orientation.get('z'),self.integral_error['yaw'],1,10,1, 'yaw')
 			return roll_gain, pitch_gain, throttle_gain, yaw_gain
 		except: 
 			return 0,0,0,0
@@ -162,24 +159,37 @@ class MinihawkController(object):
 
         	
 		while not rospy.is_shutdown():
-			#self.module_rate.sleep()
-			# save most recent position + orientation error values
-			#if (self.position != {}) :
-			
-			self.prior_position = self.position
-			self.prior_orientation = self.orientation
+
 			# get current error values 
 			rospy.Subscriber("/minihawk_SIM/MH_usb_camera_link_optical/tag_detections", AprilTagDetectionArray, self.get_apriltag_values)
-			print('positions:', self.position,)
+			print('tag detected?', self.tag_detection)
+			self.position_history.append(self.position)
+			self.orientation_history.append(self.orientation)
+
+			if len(self.position_history) > 3:
+				self.prior_position = self.position_history[-2]
+				self.prior_orientation = self.orientation_history[-2]
+				print('current error:', self.position, 'prior error:', self.prior_position, 'same?', (self.prior_position==self.position))
+				self.position_history.pop(0)
+				self.orientation_history.pop(0)
+			
+			# delete old values to save memory
+			#if len(self.integral_error) > 20:
+			#	self.integral_error.pop(0)
+
+
 			# check + update flight mode as needed
 			self.update_flight_mode()
+
 			# minimize error to help drone land 
 			if self.flightmode =='QLOITER':
 				self.control_drone_movement()
 			else: 
-				print('currently in ', self.flightmode)
+				print('Currently in ', self.flightmode)
 
 			self.module_rate.sleep()
+
+
            	#rospy.spin()
 
 
