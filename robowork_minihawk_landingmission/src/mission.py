@@ -94,7 +94,7 @@ class MinihawkController(object):
 		t4 = 1 - 2 * (y**2 + z * z)
 		Z = np.arctan2(t3, t4)
 
-		return {"x":X, "y": Y,"z": Z}
+		return {"x":X, "y": Y, "z": Z}
 
 
 	def get_apriltag_values(self,tagInfo):
@@ -112,12 +112,13 @@ class MinihawkController(object):
 	def control_drone_movement(self):
 			# calculate controls based on self.position & self.orientation: 4 first channels are 0:roll(-left,+right), 1:pitch(-up,+down), 2:throttle(-down,+up), 3:yaw(-left,+right))] standard neutral values: [1500, 1500, 1500, 1500, 1800, 1000, 1000, 1800, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 			
-			roll_gain, pitch_gain, throttle_gain, yaw_gain = self.get_all_controls()
+		roll_gain, pitch_gain, throttle_gain, yaw_gain = self.get_all_controls()
 
-			new_channel_values=  [1500 + roll_gain, 1500 + pitch_gain, 1500 + throttle_gain, 1500 + yaw_gain, 1800, 1000 , 1000, 1800, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+			
+		new_channel_values=  [1500 + roll_gain, 1500 + pitch_gain, 1500 + throttle_gain, 1500 + yaw_gain, 1800, 1000 , 1000, 1800, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-			self.control_publisher.publish(channels= new_channel_values)
-			print('updated QLOITER rc controls: ', new_channel_values)
+		self.control_publisher.publish(channels= new_channel_values)
+		print('updated QLOITER rc controls: ', new_channel_values)
 
 
 	def PID(self, current_error, prior_error,integral_error_, Kp, Kd, Ki, printcontrol, setpoint=0, ):
@@ -127,7 +128,7 @@ class MinihawkController(object):
 
 		kp_ = Kp * error
 		kd_ = Kd * (current_error - prior_error)/self.dt
-		ki_ = Ki *np.sum(integral_error_[-15:])
+		ki_ = Ki *np.sum(integral_error_[-25:])
 
 		gain = kp_ + kd_ + ki_ 
 		print(printcontrol, ': ', 'Kp:', kp_, 'Ki:', ki_, 'Kd:', kd_, 'total gain:', gain) 
@@ -136,17 +137,24 @@ class MinihawkController(object):
 		#use max gain of 100
 		if np.abs(gain) > 100:
 			gain = np.sign(gain)*100
-		
+
+		# use more sensitive max value for yaw
+		if printcontrol == 'yaw':
+			gain = min(np.abs(gain), 38)
 		return gain
 
 
 	def get_all_controls(self):
 
 		try:
-			roll_gain = self.PID(self.position.x, self.prior_position.x, self.integral_error['roll'],5, 10, 1, 'roll')
-			pitch_gain= self.PID(self.position.y, self.prior_position.y, self.integral_error['pitch'],5, 10, 1, 'pitch')
+			roll_gain = self.PID(self.position.x, self.prior_position.x, self.integral_error['roll'],5,10, 1, 'roll')
+			pitch_gain= self.PID(self.position.y, self.prior_position.y, self.integral_error['pitch'],5, 10,1 , 'pitch')
 			throttle_gain = self.PID(self.position.z, self.prior_position.z,self.integral_error['throttle'],5,10,1, 'throttle')
-			yaw_gain = self.PID(self.orientation.get('z'), self.prior_orientation.get('z'),self.integral_error['yaw'],1,10,1, 'yaw')
+			if self.position.z > 15:
+				yaw_gain = 0
+			else: 
+				yaw_gain=self.PID(self.orientation.get('z'), self.prior_orientation.get('z'),self.integral_error['yaw'],300,10,200, 'yaw')
+				
 			return roll_gain, pitch_gain, throttle_gain, yaw_gain
 		except: 
 			return 0,0,0,0
@@ -158,14 +166,14 @@ class MinihawkController(object):
 
 			# get current error values 
 			rospy.Subscriber("/minihawk_SIM/MH_usb_camera_link_optical/tag_detections", AprilTagDetectionArray, self.get_apriltag_values)
-			print('******************************************* \n\n April tag detected?', self.tag_detection)
+			print('******** April tag detected? *********', self.tag_detection)
 			self.position_history.append(self.position)
 			self.orientation_history.append(self.orientation)
 
 			if len(self.position_history) > 3:
 				self.prior_position = self.position_history[-2]
 				self.prior_orientation = self.orientation_history[-2]
-				print('Current Error:', self.position,) #'prior error:', self.prior_position, 'same?', (self.prior_position==self.position))
+				print('Current Error:', self.position, self.orientation) 
 				self.position_history.pop(0)
 				self.orientation_history.pop(0)
 			
